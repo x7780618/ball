@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export async function fetchMatches() {
-  const url = '/api/gateway/jc/football/getMatchCalculatorV1.qry?poolCode=&channel=c';
+  const url = 'https://webapi.sporttery.cn/gateway/jc/football/getMatchCalculatorV1.qry?poolCode=&channel=c';
   try {
     const res = await axios.get(url);
     console.log('fetchMatches 完整响应:', res.data);
