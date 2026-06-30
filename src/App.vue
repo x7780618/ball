@@ -3,6 +3,18 @@
     <main class="left-panel">
       <h2>今日比赛</h2>
 
+      <div v-if="showGuide" class="guide-card">
+        <div class="guide-header">💡 使用说明</div>
+        <div class="guide-steps">
+          <span class="guide-step">1. 点击下方玩法（胜平负 / 总进球 / 半全场 / 比分）</span>
+          <span class="guide-step">2. 点击你期望的比赛结果</span>
+          <span class="guide-step">3. 右侧查看你的已选方案</span>
+          <span class="guide-step">4. 输入倍数，选择过关方式，查看奖金</span>
+          <span class="guide-step">5. 拍照发给店主出票</span>
+        </div>
+        <button class="guide-close" type="button" @click="showGuide = false">知道了</button>
+      </div>
+
       <div class="tabs">
         <button
           v-for="(tab, idx) in tabs"
@@ -15,6 +27,8 @@
           {{ tab }}
         </button>
       </div>
+
+      <div class="tab-hint">{{ tabHints[currentPlayType] || '' }}</div>
 
       <div v-if="loading" class="loading">加载中...</div>
       <div v-else-if="!matchData.length" class="loading">暂无比赛数据</div>
@@ -136,6 +150,7 @@
             </option>
           </select>
         </div>
+        <div class="combination-hint" v-if="combinationHint">{{ combinationHint }}</div>
 
         <div class="result-box">
           <div class="result-item">
@@ -163,6 +178,7 @@ import { calculatePayout } from './utils/calculator';
 
 const matchData = ref([]);
 const loading = ref(true);
+const showGuide = ref(true);
 const selectedMap = reactive({});
 const selectedCombination = ref(1);
 const availableCombinations = ref([1]);
@@ -170,6 +186,13 @@ const availableCombinations = ref([1]);
 const tabs = ['混合投注', '进球数', '半全场', '比分'];
 const activeTab = ref(0);
 const currentPlayType = computed(() => ['sfp', 'zjq', 'bqc', 'bf'][activeTab.value] || 'sfp');
+
+const tabHints = {
+  sfp: '体彩按照比赛90分钟+伤停补时内的最终结果作为开奖依据（不考虑加时赛和点球大战）',
+  zjq: '进球数选项指的是两队进球数之和（不考虑加时赛和点球大战）',
+  bqc: '半全场指上半场比赛结果和全场的比赛结果（例如美国VS加拿大，半场比分0:1，全场最终比分1:1，对应赛果为：负平）（不考虑加时赛和点球大战）',
+  bf: '体彩按照比赛90分钟+伤停补时内的最终结果作为开奖依据（不考虑加时赛和点球大战）',
+};
 
 const userSelections = reactive({
   betAmount: 1,
@@ -183,6 +206,14 @@ const userSelections = reactive({
 const totalStake = computed(() => userSelections.totalStake);
 const maxPayout = computed(() => userSelections.maxPayout);
 const minPayout = computed(() => userSelections.minPayout);
+
+const combinationHint = computed(() => {
+  const n = selectedCombination.value;
+  if (n <= 0) return '';
+  if (n === 1) return '中任意一个选项即中奖';
+  const oddsPart = Array(n).fill('赔率').join('*');
+  return `至少猜中${n}场比赛即中奖，奖金为${oddsPart}*倍数*2`;
+});
 
 function switchTab(idx) {
   activeTab.value = idx;
@@ -458,6 +489,74 @@ onMounted(async () => {
   color: #1f2a3a;
   font-size: 24px;
   font-weight: 650;
+}
+
+/* 新手引导卡片 */
+.guide-card {
+  position: relative;
+  margin: 0 0 18px;
+  border: 1px solid #c8e6c9;
+  border-radius: 12px;
+  padding: 16px 18px 14px;
+  background: linear-gradient(135deg, #f1f9f0 0%, #e8f5e9 100%);
+  box-shadow: 0 2px 10px rgba(7, 193, 96, 0.08);
+}
+
+.guide-header {
+  margin-bottom: 12px;
+  color: #2e7d32;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.guide-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.guide-step {
+  position: relative;
+  padding-left: 16px;
+  color: #3e5a3e;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.guide-step::before {
+  position: absolute;
+  left: 2px;
+  content: "·";
+  color: #4caf50;
+  font-weight: 700;
+}
+
+.guide-close {
+  float: right;
+  border: 1px solid #a5d6a7;
+  border-radius: 16px;
+  padding: 4px 18px;
+  background: #ffffff;
+  color: #2e7d32;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.guide-close:hover {
+  background: #2e7d32;
+  color: #ffffff;
+  border-color: #2e7d32;
+}
+
+.tab-hint {
+  margin: -12px 0 16px;
+  padding: 0 4px;
+  color: #a0abbd;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .tabs {
@@ -806,6 +905,13 @@ onMounted(async () => {
   flex-shrink: 0;
   border-top: 1px solid #edf0f4;
   padding-top: 16px;
+}
+
+.combination-hint {
+  margin: -4px 0 12px 68px;
+  color: #8e9aaf;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .control-row {
