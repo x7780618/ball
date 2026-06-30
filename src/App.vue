@@ -1,68 +1,93 @@
 <template>
   <div id="app">
-    <!-- 左栏：比赛列表 -->
-    <div class="left-panel">
-      <h2>⚽ 今日比赛</h2>
+    <main class="left-panel">
+      <h2>今日比赛</h2>
+
       <div class="tabs">
-        <div
+        <button
           v-for="(tab, idx) in tabs"
-          :key="idx"
+          :key="tab"
           class="tab-item"
           :class="{ active: activeTab === idx }"
+          type="button"
           @click="switchTab(idx)"
         >
           {{ tab }}
-        </div>
+        </button>
       </div>
 
       <div v-if="loading" class="loading">加载中...</div>
-      <div v-for="(day, dayIdx) in matchData" :key="dayIdx" class="day-group">
+      <div v-else-if="!matchData.length" class="loading">暂无比赛数据</div>
+
+      <section v-for="(day, dayIdx) in matchData" :key="day.businessDate || dayIdx" class="day-group">
         <div class="day-title">
           {{ day.weekday }} {{ day.businessDate }} 共 {{ day.matchCount }} 场
         </div>
-        <div v-for="(match, matchIdx) in day.subMatchList" :key="match.matchId" class="match-card">
+
+        <article v-for="(match, matchIdx) in day.subMatchList" :key="match.matchId" class="match-card">
           <div class="match-header">
             <span class="league">{{ match.leagueAbbName }}</span>
             <span class="team">{{ match.homeTeamAbbName }}</span>
+            <span v-if="getHandicap(match)" class="handicap-badge">{{ getHandicap(match) }}</span>
             <span class="vs">VS</span>
             <span class="team">{{ match.awayTeamAbbName }}</span>
             <span class="match-num">{{ match.matchNumStr }}</span>
             <span class="match-time">{{ match.matchTime }}</span>
           </div>
+
           <div class="odds-row">
             <div
-              class="odd-item"
               v-for="(item, idx) in getOptionsForMatch(match, currentPlayType)"
-              :key="idx"
-              @click="onSelectBet(dayIdx, matchIdx, currentPlayType, idx)"
-              :class="{ selected: isSelected(dayIdx, matchIdx, currentPlayType, idx) }"
-              :title="item.pv ? '' : '无赔率'"
+              :key="`${currentPlayType}-${idx}`"
+              class="odd-wrapper"
             >
-              <div class="odd-name">{{ item.xuanxiangname }}</div>
-              <div class="odd-value">{{ item.pv || '-' }}</div>
+              <span v-if="currentPlayType === 'sfp' && idx === 0" class="group-label">胜平负</span>
+              <span
+                v-if="
+                  currentPlayType === 'sfp' &&
+                  item.isHandicap &&
+                  (idx === 0 || !getOptionsForMatch(match, currentPlayType)[idx - 1].isHandicap)
+                "
+                class="group-label"
+              >
+                让球
+              </span>
+
+              <button
+                class="odd-item"
+                :class="{ handicap: item.isHandicap, selected: isSelected(dayIdx, matchIdx, currentPlayType, idx) }"
+                :title="item.pv ? '' : '无赔率'"
+                type="button"
+                @click="onSelectBet(dayIdx, matchIdx, currentPlayType, idx)"
+              >
+                <span class="odd-name">
+                  <span v-if="item.isHandicap" class="odd-badge">让</span>
+                  {{ item.xuanxiangname.replace(/^让/, '') }}
+                </span>
+                <span class="odd-value">{{ item.pv || '-' }}</span>
+              </button>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
+        </article>
+      </section>
+    </main>
 
-    <!-- 右栏：固定悬浮计算器 -->
-    <div class="right-panel">
+    <aside class="right-panel">
       <div class="right-header">
-        <h2>📊 投注计算器</h2>
-        <button class="clear-btn" @click="clearAllSelections">清除已选</button>
+        <h2>投注计算器</h2>
+        <button class="clear-btn" type="button" @click="clearAllSelections">清除已选</button>
       </div>
 
       <div class="selected-matches">
-        <div v-if="userSelections.matches && userSelections.matches.length">
-          <div v-for="(m, idx) in userSelections.matches" :key="idx" class="selected-match">
+        <div v-if="userSelections.matches.length">
+          <div v-for="(m, idx) in userSelections.matches" :key="`${m.matchId}-${idx}`" class="selected-match">
             <div class="match-info">
               <span class="match-num-sm">{{ m.matchNum }}</span>
               <span>{{ m.homeTeamAbbName }} vs {{ m.awayTeamAbbName }}</span>
             </div>
             <div class="selected-options">
-              <span v-for="p in m.plays" :key="p.option" class="option-tag">
-                {{ p.type }}：{{ p.option }} ({{ p.odds }})
+              <span v-for="p in m.plays" :key="`${p.type}-${p.option}`" class="option-tag">
+                {{ p.type }}: {{ p.option }} ({{ p.odds }})
               </span>
             </div>
           </div>
@@ -72,16 +97,16 @@
 
       <div class="controls">
         <div class="control-row">
-          <label>倍数：</label>
-          <input type="number" v-model.number="userSelections.betAmount" min="1" step="1" />
+          <label for="bet-amount">倍数</label>
+          <input id="bet-amount" v-model.number="userSelections.betAmount" min="1" step="1" type="number" />
           <span class="unit">倍</span>
         </div>
 
         <div class="control-row">
-          <label>串关：</label>
-          <select v-model="selectedCombination" @change="onCombinationChange">
+          <label for="combination">串关</label>
+          <select id="combination" v-model.number="selectedCombination" @change="onCombinationChange">
             <option v-for="n in availableCombinations" :key="n" :value="n">
-              {{ n === 1 ? '单关' : n + '串1' }}
+              {{ n === 1 ? '单关' : `${n}串1` }}
             </option>
           </select>
         </div>
@@ -101,45 +126,42 @@
           </div>
         </div>
       </div>
-    </div>
+    </aside>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { fetchMatches } from './api/match';
 import { calculatePayout } from './utils/calculator';
 
-// 数据状态
 const matchData = ref([]);
 const loading = ref(true);
+const selectedMap = reactive({});
+const selectedCombination = ref(1);
+const availableCombinations = ref([1]);
 
-// 用户选择
+const tabs = ['混合投注', '进球数', '半全场', '比分'];
+const activeTab = ref(0);
+const currentPlayType = computed(() => ['sfp', 'zjq', 'bqc', 'bf'][activeTab.value] || 'sfp');
+
 const userSelections = reactive({
   betAmount: 1,
   combinations: [1],
   matches: [],
   totalStake: 0,
   maxPayout: '0.00',
-  minPayout: '0.00'
+  minPayout: '0.00',
 });
 
-// 记录选中状态
-const selectedMap = reactive({});
-const selectedCombination = ref(1);
-const tabs = ['混合投注', '进球数', '半全场', '比分'];
-const activeTab = ref(0);
-
-const currentPlayType = computed(() => {
-  const map = ['sfp', 'zjq', 'bqc', 'bf'];
-  return map[activeTab.value] || 'sfp';
-});
+const totalStake = computed(() => userSelections.totalStake);
+const maxPayout = computed(() => userSelections.maxPayout);
+const minPayout = computed(() => userSelections.minPayout);
 
 function switchTab(idx) {
   activeTab.value = idx;
 }
 
-// ---------- 获取某场比赛对应玩法的选项 ----------
 function getOptionsForMatch(match, playType) {
   const had = match.had || {};
   const hhad = match.hhad || {};
@@ -152,9 +174,9 @@ function getOptionsForMatch(match, playType) {
       { name: '胜', pv: had.h },
       { name: '平', pv: had.d },
       { name: '负', pv: had.a },
-      { name: '让胜', pv: hhad.h },
-      { name: '让平', pv: hhad.d },
-      { name: '让负', pv: hhad.a }
+      { name: '让胜', pv: hhad.h, isHandicap: true },
+      { name: '让平', pv: hhad.d, isHandicap: true },
+      { name: '让负', pv: hhad.a, isHandicap: true },
     ],
     zjq: [
       { name: '0球', pv: ttg.s0 },
@@ -164,7 +186,7 @@ function getOptionsForMatch(match, playType) {
       { name: '4球', pv: ttg.s4 },
       { name: '5球', pv: ttg.s5 },
       { name: '6球', pv: ttg.s6 },
-      { name: '7+', pv: ttg.s7 }
+      { name: '7+', pv: ttg.s7 },
     ],
     bqc: [
       { name: '胜胜', pv: hafu.hh },
@@ -175,7 +197,7 @@ function getOptionsForMatch(match, playType) {
       { name: '平负', pv: hafu.da },
       { name: '负胜', pv: hafu.ah },
       { name: '负平', pv: hafu.ad },
-      { name: '负负', pv: hafu.aa }
+      { name: '负负', pv: hafu.aa },
     ],
     bf: [
       { name: '1:0', pv: crs.s01s00 },
@@ -208,130 +230,138 @@ function getOptionsForMatch(match, playType) {
       { name: '0:5', pv: crs.s00s05 },
       { name: '1:5', pv: crs.s01s05 },
       { name: '2:5', pv: crs.s02s05 },
-      { name: '负其他', pv: crs.s1sa }
-    ]
+      { name: '负其他', pv: crs.s1sa },
+    ],
   };
 
-  const items = configs[playType] || [];
-  return items.map(item => ({
+  return (configs[playType] || []).map((item) => ({
     xuanxiangname: item.name,
-    pv: item.pv || ''
+    pv: item.pv || '',
+    isHandicap: !!item.isHandicap,
   }));
 }
 
-// ---------- 判断是否选中 ----------
-function isSelected(dayIdx, matchIdx, playType, optionIdx) {
-  const key = `${dayIdx}-${matchIdx}-${playType}-${optionIdx}`;
-  return !!selectedMap[key];
+function getHandicap(match) {
+  if (!match) return '';
+
+  if (match.hhad?.goalLine || match.hhad?.goalLine === 0) {
+    return formatHandicap(match.hhad.goalLine);
+  }
+
+  if (Array.isArray(match.oddsList)) {
+    const odds = match.oddsList.find((item) => item?.goalLine || item?.goalLine === 0);
+    if (odds) return formatHandicap(odds.goalLine);
+  }
+
+  return '';
 }
 
-// ---------- 点击选择/取消 ----------
+function formatHandicap(value) {
+  const raw = String(value).trim();
+  const num = Number.parseFloat(raw.replace(/[^0-9.+-]/g, ''));
+  if (Number.isNaN(num)) return raw;
+  return `让${num > 0 || raw.startsWith('+') ? '+' : ''}${num}`;
+}
+
+function isSelected(dayIdx, matchIdx, playType, optionIdx) {
+  return !!selectedMap[`${dayIdx}-${matchIdx}-${playType}-${optionIdx}`];
+}
+
 function onSelectBet(dayIdx, matchIdx, playType, optionIdx) {
   const match = matchData.value[dayIdx]?.subMatchList?.[matchIdx];
   if (!match) return;
-  const items = getOptionsForMatch(match, playType);
-  const item = items[optionIdx];
-  if (!item.pv) return;
+
+  const item = getOptionsForMatch(match, playType)[optionIdx];
+  if (!item?.pv) return;
 
   const key = `${dayIdx}-${matchIdx}-${playType}-${optionIdx}`;
   if (selectedMap[key]) {
     delete selectedMap[key];
-    rebuildSelections();
-    updateAvailableCombinations();
-    recalc();
+    refreshSelections();
     return;
   }
 
-  // 检查同一场比赛是否已有其他玩法（除sfp外）
   const matchKeyPrefix = `${dayIdx}-${matchIdx}`;
-  let hasOtherPlayType = false;
-  for (const k in selectedMap) {
-    if (k.startsWith(matchKeyPrefix)) {
-      const parts = k.split('-');
-      const existingPlayType = parts[2];
-      if (existingPlayType !== playType && !(existingPlayType === 'sfp' && playType === 'sfp')) {
-        hasOtherPlayType = true;
-        break;
-      }
-    }
-  }
+  const hasOtherPlayType = Object.keys(selectedMap).some((selectedKey) => {
+    if (!selectedKey.startsWith(matchKeyPrefix)) return false;
+    const existingPlayType = selectedKey.split('-')[2];
+    return existingPlayType !== playType && !(existingPlayType === 'sfp' && playType === 'sfp');
+  });
+
   if (hasOtherPlayType) {
-    alert('一场比赛仅可选择一种玩法（胜平负/让球可同时选）');
+    alert('一场比赛仅可选择一种玩法，胜平负和让球可同时选择');
     return;
   }
 
   selectedMap[key] = true;
-  rebuildSelections();
-  updateAvailableCombinations();
-  recalc();
+  refreshSelections();
 }
 
-// ---------- 一键清除 ----------
 function clearAllSelections() {
-  for (const key in selectedMap) {
+  for (const key of Object.keys(selectedMap)) {
     delete selectedMap[key];
   }
+  refreshSelections();
+}
+
+function refreshSelections() {
   rebuildSelections();
   updateAvailableCombinations();
   recalc();
 }
 
-// ---------- 重建 userSelections.matches ----------
 function rebuildSelections() {
   const newMatches = [];
-  for (let dayIdx = 0; dayIdx < matchData.value.length; dayIdx++) {
+
+  for (let dayIdx = 0; dayIdx < matchData.value.length; dayIdx += 1) {
     const day = matchData.value[dayIdx];
-    for (let matchIdx = 0; matchIdx < day.subMatchList.length; matchIdx++) {
+    for (let matchIdx = 0; matchIdx < (day.subMatchList || []).length; matchIdx += 1) {
       const match = day.subMatchList[matchIdx];
       const plays = [];
-      for (const key in selectedMap) {
-        const parts = key.split('-');
-        if (parseInt(parts[0]) === dayIdx && parseInt(parts[1]) === matchIdx) {
-          const playType = parts[2];
-          const optIdx = parseInt(parts[3]);
-          const items = getOptionsForMatch(match, playType);
-          const item = items[optIdx];
-          if (item && item.pv) {
-            const typeMap = { sfp: '胜平负', zjq: '总进球', bqc: '半全场', bf: '比分' };
-            let typeDisplay = typeMap[playType] || '未知';
-            if (playType === 'sfp') {
-              typeDisplay = item.xuanxiangname.includes('让') ? '让球' : '胜平负';
-            }
-            plays.push({
-              type: typeDisplay,
-              option: item.xuanxiangname,
-              odds: parseFloat(item.pv)
-            });
-          }
+
+      for (const key of Object.keys(selectedMap)) {
+        const [selectedDayIdx, selectedMatchIdx, playType, selectedOptionIdx] = key.split('-');
+        if (Number(selectedDayIdx) !== dayIdx || Number(selectedMatchIdx) !== matchIdx) continue;
+
+        const item = getOptionsForMatch(match, playType)[Number(selectedOptionIdx)];
+        if (!item?.pv) continue;
+
+        let typeDisplay = { sfp: '胜平负', zjq: '总进球', bqc: '半全场', bf: '比分' }[playType] || '未知';
+        if (playType === 'sfp') {
+          typeDisplay = item.isHandicap ? '让球' : '胜平负';
         }
+
+        plays.push({
+          type: typeDisplay,
+          option: item.xuanxiangname,
+          odds: Number.parseFloat(item.pv),
+        });
       }
-      if (plays.length > 0) {
+
+      if (plays.length) {
         newMatches.push({
           matchId: match.matchId,
           homeTeamAbbName: match.homeTeamAbbName,
           awayTeamAbbName: match.awayTeamAbbName,
           matchNum: match.matchNum,
           matchTime: match.matchTime,
-          plays
+          plays,
         });
       }
     }
   }
+
   userSelections.matches = newMatches;
 }
 
-// ---------- 可用串关 ----------
-const availableCombinations = ref([1]);
-
 function updateAvailableCombinations() {
-  const len = userSelections.matches ? userSelections.matches.length : 0;
-  const maxN = Math.min(len, 8);
-  const arr = [];
-  for (let i = 1; i <= maxN; i++) arr.push(i);
-  availableCombinations.value = arr;
-  if (!arr.includes(selectedCombination.value)) {
-    selectedCombination.value = arr.length ? arr[arr.length - 1] : 1;
+  const maxN = Math.min(userSelections.matches.length, 8);
+  availableCombinations.value = Array.from({ length: maxN }, (_, idx) => idx + 1);
+
+  if (!availableCombinations.value.includes(selectedCombination.value)) {
+    selectedCombination.value = availableCombinations.value.at(-1) || 1;
   }
+
   userSelections.combinations = [selectedCombination.value];
 }
 
@@ -340,37 +370,31 @@ function onCombinationChange() {
   recalc();
 }
 
-// ---------- 计算 ----------
 function recalc() {
-  if (!userSelections.matches || userSelections.matches.length === 0) {
+  if (!userSelections.matches.length) {
     userSelections.totalStake = 0;
     userSelections.maxPayout = '0.00';
     userSelections.minPayout = '0.00';
     return;
   }
+
   const result = calculatePayout(userSelections);
   userSelections.totalStake = result.totalStake;
   userSelections.maxPayout = result.maxPayout.toFixed(2);
   userSelections.minPayout = result.minPayout.toFixed(2);
 }
 
-const totalStake = computed(() => userSelections.totalStake);
-const maxPayout = computed(() => userSelections.maxPayout);
-const minPayout = computed(() => userSelections.minPayout);
-
 watch(() => userSelections.betAmount, recalc);
 
-// ---------- 初始化 ----------
 onMounted(async () => {
   try {
-    const data = await fetchMatches();
-    matchData.value = data;
-    loading.value = false;
+    matchData.value = await fetchMatches();
     updateAvailableCombinations();
     recalc();
-  } catch (e) {
+  } catch (error) {
     alert('数据加载失败，请检查网络或代理配置');
-    console.error(e);
+    console.error(error);
+  } finally {
     loading.value = false;
   }
 });
@@ -379,65 +403,63 @@ onMounted(async () => {
 <style scoped>
 * {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
 
 #app {
   display: flex;
   min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  margin: 0;
+  padding: 0;
   background: #f0f2f5;
   color: #1f2a3a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  text-align: left;
 }
 
-/* ---------- 左栏 ---------- */
 .left-panel {
   flex: 1;
-  padding: 24px 28px 40px 28px;
-  padding-right: 420px;          /* 与面板宽度一致，消除空白间隙 */
-  background: #f7f9fc;
   min-width: 0;
   height: 100vh;
   overflow-y: auto;
-  box-sizing: border-box;
+  padding: 24px 448px 40px 28px;
+  background: #f7f9fc;
 }
 
 .left-panel h2 {
-  font-size: 24px;
-  margin-bottom: 16px;
-  color: #1f2a3a;
-  border-left: 5px solid #07c160;
+  margin: 0 0 16px;
   padding-left: 14px;
-  letter-spacing: 0.5px;
+  border-left: 5px solid #07c160;
+  color: #1f2a3a;
+  font-size: 24px;
+  font-weight: 650;
 }
 
 .tabs {
   display: flex;
   gap: 8px;
   margin-bottom: 24px;
-  background: #ffffff;
-  border-radius: 12px;
   padding: 6px;
+  border-radius: 8px;
+  background: #ffffff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .tab-item {
   flex: 1;
-  text-align: center;
+  border: 0;
+  border-radius: 6px;
   padding: 10px 0;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: 500;
+  background: transparent;
   color: #5a6a7a;
   cursor: pointer;
-  transition: all 0.25s ease;
-  user-select: none;
+  font-size: 15px;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
 .tab-item.active {
   background: #07c160;
-  color: #fff;
+  color: #ffffff;
   box-shadow: 0 2px 6px rgba(7, 193, 96, 0.3);
 }
 
@@ -446,83 +468,87 @@ onMounted(async () => {
 }
 
 .loading {
-  text-align: center;
   padding: 60px 0;
+  color: #8e9aaf;
   font-size: 16px;
-  color: #a0aec0;
+  text-align: center;
 }
 
 .day-group {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 18px 20px;
   margin-bottom: 24px;
+  border-radius: 8px;
+  padding: 18px 20px;
+  background: #ffffff;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  transition: box-shadow 0.2s;
-}
-
-.day-group:hover {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
 }
 
 .day-title {
-  font-weight: 600;
-  font-size: 17px;
-  color: #2c3e50;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #ebeff4;
   margin-bottom: 16px;
+  border-bottom: 1px solid #ebeff4;
+  padding-bottom: 12px;
+  color: #2c3e50;
+  font-size: 17px;
+  font-weight: 650;
 }
 
 .match-card {
-  padding: 14px 0;
   border-bottom: 1px solid #f2f4f8;
+  padding: 14px 0;
 }
 
 .match-card:last-child {
-  border-bottom: none;
+  border-bottom: 0;
 }
 
 .match-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
   margin-bottom: 10px;
 }
 
-.league {
+.league,
+.match-num {
+  border-radius: 6px;
   background: #e8edf4;
-  padding: 2px 14px;
-  border-radius: 20px;
-  font-size: 12px;
   color: #2c3e50;
+  font-size: 12px;
+}
+
+.league {
+  padding: 2px 14px;
   font-weight: 500;
 }
 
 .team {
-  font-weight: 500;
   font-size: 16px;
+  font-weight: 600;
 }
 
 .vs {
   color: #8e9aaf;
-  font-weight: 400;
   font-size: 13px;
 }
 
 .match-num {
-  color: #6b7a8d;
-  font-size: 13px;
-  background: #f0f2f5;
-  padding: 0 10px;
-  border-radius: 6px;
+  padding: 1px 10px;
 }
 
 .match-time {
+  margin-left: auto;
   color: #8e9aaf;
   font-size: 13px;
-  margin-left: auto;
+}
+
+.handicap-badge {
+  border: 1px solid #f5c27a;
+  border-radius: 12px;
+  padding: 2px 8px;
+  background: #fff3e0;
+  color: #d97706;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .odds-row {
@@ -532,89 +558,113 @@ onMounted(async () => {
   margin-top: 4px;
 }
 
+.odd-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-label {
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #f5f7fa;
+  color: #5a6a7a;
+  font-size: 12px;
+}
+
 .odd-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   min-width: 62px;
-  padding: 6px 10px;
   border: 1px solid #dde1e6;
-  border-radius: 24px;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: #ffffff;
   cursor: pointer;
-  background: #fff;
-  transition: all 0.15s ease;
-  user-select: none;
   font-size: 13px;
   line-height: 1.4;
+  transition: all 0.15s ease;
 }
 
 .odd-item:hover {
-  background: #f0f5ff;
   border-color: #b0c4de;
+  background: #f0f5ff;
   transform: translateY(-1px);
 }
 
+.odd-item.handicap {
+  border-color: #f3d9b3;
+  background: #fffaf0;
+}
+
 .odd-item.selected {
-  background: #07c160;
-  color: white;
   border-color: #07c160;
+  background: #07c160;
+  color: #ffffff;
   box-shadow: 0 2px 8px rgba(7, 193, 96, 0.25);
 }
 
-.odd-item .odd-name {
+.odd-badge {
+  display: inline-block;
+  margin-right: 5px;
+  border-radius: 10px;
+  padding: 1px 5px;
+  background: #ffd8a8;
+  color: #9a5600;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.odd-name {
   font-weight: 500;
 }
 
-.odd-item .odd-value {
-  font-size: 15px;
-  font-weight: 600;
+.odd-value {
   margin-top: 1px;
+  font-size: 15px;
+  font-weight: 650;
 }
 
-.odd-item.selected .odd-value {
-  color: white;
-}
-
-/* ---------- 右侧固定悬浮面板 ---------- */
 .right-panel {
   position: fixed;
-  right: 0;
   top: 0;
-  width: 420px;
-  height: 100vh;
-  background: #ffffff;
-  padding: 24px 22px 30px 22px;
-  border-left: 1px solid #e4e8ed;
+  right: 0;
+  z-index: 100;
   display: flex;
   flex-direction: column;
+  width: 420px;
+  height: 100vh;
   overflow-y: auto;
+  border-left: 1px solid #e4e8ed;
+  padding: 24px 22px 30px;
+  background: #ffffff;
   box-shadow: -4px 0 20px rgba(0, 0, 0, 0.04);
-  z-index: 100;
 }
 
 .right-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
   flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
 }
 
 .right-header h2 {
-  font-size: 22px;
-  color: #1f2a3a;
   margin: 0;
+  color: #1f2a3a;
+  font-size: 22px;
+  font-weight: 650;
 }
 
 .clear-btn {
-  background: #f0f2f5;
-  border: none;
-  padding: 6px 16px;
+  border: 0;
   border-radius: 20px;
-  font-size: 14px;
+  padding: 6px 16px;
+  background: #f0f2f5;
   color: #5a6a7a;
   cursor: pointer;
-  transition: all 0.2s;
+  font-size: 14px;
   font-weight: 500;
 }
 
@@ -623,41 +673,45 @@ onMounted(async () => {
   color: #e53935;
 }
 
-/* 已选列表 – 自适应高度，无最大高度，随内容撑开，右侧面板滚动 */
 .selected-matches {
-  flex: 0 0 auto;
+  min-height: 80px;
   margin-bottom: 16px;
   border: 1px solid #edf0f4;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 14px;
   background: #fafbfc;
-  min-height: 80px;
 }
 
 .empty-tip {
-  color: #a0aec0;
-  text-align: center;
   padding: 20px 0;
+  color: #8e9aaf;
   font-size: 14px;
+  text-align: center;
 }
 
 .selected-match {
-  background: #f1f8fe;
-  border-radius: 10px;
-  padding: 10px 14px;
   margin-bottom: 10px;
   border-left: 3px solid #07c160;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #f1f8fe;
 }
 
 .selected-match:last-child {
   margin-bottom: 0;
 }
 
-.match-info {
+.match-info,
+.selected-options,
+.control-row,
+.result-item {
   display: flex;
+}
+
+.match-info {
   gap: 10px;
-  font-weight: 500;
   font-size: 14px;
+  font-weight: 500;
 }
 
 .match-num-sm {
@@ -666,54 +720,51 @@ onMounted(async () => {
 }
 
 .selected-options {
-  display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 6px;
 }
 
 .option-tag {
-  background: #e8f0fe;
-  padding: 2px 12px;
   border-radius: 16px;
-  font-size: 13px;
+  padding: 2px 12px;
+  background: #e8f0fe;
   color: #1f2a3a;
+  font-size: 13px;
 }
 
 .controls {
+  flex-shrink: 0;
   border-top: 1px solid #edf0f4;
   padding-top: 16px;
-  flex-shrink: 0;
 }
 
 .control-row {
-  display: flex;
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
 }
 
 .control-row label {
-  font-weight: 500;
-  font-size: 14px;
-  width: 56px;
   flex-shrink: 0;
+  width: 56px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .control-row input,
 .control-row select {
-  padding: 8px 12px;
   border: 1px solid #d0d7de;
-  border-radius: 8px;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #ffffff;
   font-size: 14px;
-  background: #fff;
-  transition: border 0.2s, box-shadow 0.2s;
 }
 
 .control-row input:focus,
 .control-row select:focus {
   border-color: #07c160;
-  outline: none;
+  outline: 0;
   box-shadow: 0 0 0 3px rgba(7, 193, 96, 0.1);
 }
 
@@ -722,19 +773,18 @@ onMounted(async () => {
 }
 
 .unit {
-  font-size: 14px;
   color: #5a6a7a;
+  font-size: 14px;
 }
 
 .result-box {
-  background: #f7f9fc;
-  border-radius: 12px;
-  padding: 16px 18px;
   margin-top: 6px;
+  border-radius: 8px;
+  padding: 16px 18px;
+  background: #f7f9fc;
 }
 
 .result-item {
-  display: flex;
   justify-content: space-between;
   padding: 6px 0;
   font-size: 15px;
@@ -745,52 +795,49 @@ onMounted(async () => {
 }
 
 .result-item .value {
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .result-item .highlight {
   color: #07c160;
 }
 
-/* 滚动条优化 */
 .left-panel::-webkit-scrollbar,
 .right-panel::-webkit-scrollbar {
   width: 6px;
 }
+
 .left-panel::-webkit-scrollbar-track,
 .right-panel::-webkit-scrollbar-track {
   background: #f0f2f5;
 }
+
 .left-panel::-webkit-scrollbar-thumb,
 .right-panel::-webkit-scrollbar-thumb {
-  background: #c4cdd8;
   border-radius: 3px;
-}
-.left-panel::-webkit-scrollbar-thumb:hover,
-.right-panel::-webkit-scrollbar-thumb:hover {
-  background: #a0aec0;
+  background: #c4cdd8;
 }
 
-/* ---------- 响应式 ---------- */
 @media (max-width: 900px) {
+  #app {
+    display: block;
+  }
+
   .left-panel {
-    padding-right: 16px;
     height: auto;
     overflow-y: visible;
+    padding: 16px;
   }
+
   .right-panel {
     position: static;
     width: 100%;
     height: auto;
-    border-left: none;
-    border-top: 1px solid #e4e8ed;
-    box-shadow: none;
-    padding: 16px;
-    z-index: auto;
     overflow-y: visible;
-  }
-  .selected-matches {
-    max-height: none;
+    border-top: 1px solid #e4e8ed;
+    border-left: 0;
+    padding: 16px;
+    box-shadow: none;
   }
 }
 </style>
