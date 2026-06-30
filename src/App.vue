@@ -28,44 +28,70 @@
           <div class="match-header">
             <span class="league">{{ match.leagueAbbName }}</span>
             <span class="team">{{ match.homeTeamAbbName }}</span>
-            <span v-if="currentPlayType === 'sfp' && getHandicap(match)" class="handicap-badge">{{ getHandicap(match) }}</span>
             <span class="vs">VS</span>
             <span class="team">{{ match.awayTeamAbbName }}</span>
             <span class="match-num">{{ match.matchNumStr }}</span>
             <span class="match-time">{{ match.matchTime }}</span>
           </div>
 
-          <div class="odds-row">
+          <!-- 非混合投注：单行布局 -->
+          <div v-if="currentPlayType !== 'sfp'" class="odds-row">
             <div
               v-for="(item, idx) in getOptionsForMatch(match, currentPlayType)"
               :key="`${currentPlayType}-${idx}`"
               class="odd-wrapper"
             >
-              <span v-if="currentPlayType === 'sfp' && idx === 0" class="group-label">胜平负</span>
-              <span
-                v-if="
-                  currentPlayType === 'sfp' &&
-                  item.isHandicap &&
-                  (idx === 0 || !getOptionsForMatch(match, currentPlayType)[idx - 1].isHandicap)
-                "
-                class="group-label"
-              >
-                让球
-              </span>
-
               <button
                 class="odd-item"
-                :class="{ handicap: item.isHandicap, selected: isSelected(dayIdx, matchIdx, currentPlayType, idx) }"
+                :class="{ selected: isSelected(dayIdx, matchIdx, currentPlayType, idx) }"
                 :title="item.pv ? '' : '无赔率'"
                 type="button"
                 @click="onSelectBet(dayIdx, matchIdx, currentPlayType, idx)"
               >
-                <span class="odd-name">
-                  <span v-if="item.isHandicap" class="odd-badge">让</span>
-                  {{ item.xuanxiangname.replace(/^让/, '') }}
-                </span>
+                <span class="odd-name">{{ item.xuanxiangname }}</span>
                 <span class="odd-value">{{ item.pv || '-' }}</span>
               </button>
+            </div>
+          </div>
+          <!-- 混合投注：两行 5 列网格布局 -->
+          <div v-else class="odds-row-sfp">
+            <div class="sfp-row">
+              <span class="group-label">胜平负</span>
+              <span class="spacer"></span>
+              <template v-for="(item, idx) in getOptionsForMatch(match, 'sfp')" :key="idx">
+                <button
+                  v-if="!item.isHandicap"
+                  class="odd-item"
+                  :class="{ selected: isSelected(dayIdx, matchIdx, 'sfp', idx) }"
+                  :title="item.pv ? '' : '无赔率'"
+                  type="button"
+                  @click="onSelectBet(dayIdx, matchIdx, 'sfp', idx)"
+                >
+                  <span class="odd-name">{{ item.xuanxiangname }}</span>
+                  <span class="odd-value">{{ item.pv || '-' }}</span>
+                </button>
+              </template>
+            </div>
+            <div class="sfp-row">
+              <span class="group-label">让球胜平负</span>
+              <span v-if="getHandicap(match)" class="sfp-handicap-badge">{{ getHandicap(match) }}</span>
+              <span v-else class="spacer"></span>
+              <template v-for="(item, idx) in getOptionsForMatch(match, 'sfp')" :key="idx">
+                <button
+                  v-if="item.isHandicap"
+                  class="odd-item handicap"
+                  :class="{ selected: isSelected(dayIdx, matchIdx, 'sfp', idx) }"
+                  :title="item.pv ? '' : '无赔率'"
+                  type="button"
+                  @click="onSelectBet(dayIdx, matchIdx, 'sfp', idx)"
+                >
+                  <span class="odd-name">
+                    <span class="odd-badge">让</span>
+                    {{ item.xuanxiangname.replace(/^让/, '') }}
+                  </span>
+                  <span class="odd-value">{{ item.pv || '-' }}</span>
+                </button>
+              </template>
             </div>
           </div>
         </article>
@@ -556,6 +582,49 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 4px;
+}
+
+.odds-row-sfp {
+  margin-top: 4px;
+}
+
+.sfp-row {
+  display: grid;
+  grid-template-columns: 1.2fr 0.5fr 1.2fr 1.2fr 1.2fr;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sfp-row:last-child {
+  margin-bottom: 0;
+}
+
+.sfp-row .group-label {
+  justify-self: center;
+  white-space: nowrap;
+}
+
+.sfp-handicap-badge {
+  justify-self: center;
+  border: 1px solid #f5c27a;
+  border-radius: 12px;
+  padding: 4px 10px;
+  background: #fff3e0;
+  color: #d97706;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.sfp-row .odd-item {
+  width: 100%;
+  min-width: 0;
+}
+
+.spacer {
+  /* 占位空元素，保持列对齐 */
 }
 
 .odd-wrapper {
