@@ -28,7 +28,7 @@
           <div class="match-header">
             <span class="league">{{ match.leagueAbbName }}</span>
             <span class="team">{{ match.homeTeamAbbName }}</span>
-            <span v-if="getHandicap(match)" class="handicap-badge">{{ getHandicap(match) }}</span>
+            <span v-if="currentPlayType === 'sfp' && getHandicap(match)" class="handicap-badge">{{ getHandicap(match) }}</span>
             <span class="vs">VS</span>
             <span class="team">{{ match.awayTeamAbbName }}</span>
             <span class="match-num">{{ match.matchNumStr }}</span>
